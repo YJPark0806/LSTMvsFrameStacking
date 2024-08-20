@@ -24,7 +24,8 @@ from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.vec_env import DummyVecEnv
+#from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.envs import DummyVecEnv, VecTransposeImage
 
 import torch
 import torch.nn as nn
@@ -35,49 +36,41 @@ from torch.optim import Adam
 from torch.distributions import MultivariateNormal
 
 
-# Set hyperparameters
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-total_timesteps = 250000
-episodes_test = 100
-
 
 #==================================================================================
 # First, we calculate the Mean reward of the Random Policy to set the baseline.
-env = gym.make("Pendulum-v0")
 
-# Random policy
-total_rewards = []
 
-for _ in range(episodes_test):
-    obs = env.reset()
-    done = False
-    episode_reward = 0
-    while not done:
-        # Take a random action, ensuring it is in the correct format
-        action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)  # Handle the additional truncated value
-        episode_reward += reward
-    total_rewards.append(episode_reward)
+def random_policy():
 
-mean_reward_random = np.mean(total_rewards)
-std_reward_random = np.std(total_rewards)
+    env = gym.make("Pendulum-v0")
 
-print(f"Mean reward, random policy: {mean_reward_random} +/- {std_reward_random}")
+    # Random policy
+    total_rewards = []
+
+    for _ in range(episodes_test):
+        obs = env.reset()
+        done = False
+        episode_reward = 0
+        while not done:
+            # Take a random action, ensuring it is in the correct format
+            action = env.action_space.sample()
+            obs, reward, done, info = env.step(action)  # Handle the additional truncated value
+            episode_reward += reward
+        total_rewards.append(episode_reward)
+
+    mean_reward_random = np.mean(total_rewards)
+    std_reward_random = np.std(total_rewards)
+
+    print(f"Mean reward, random policy: {mean_reward_random} +/- {std_reward_random}")
 
 #==================================================================================
 
-# One observation image per step
+# We only deal with one observation image per step
 
 # Define the Environment Wrapper
-
-import gym
-import numpy as np
-import cv2
-from gym import spaces
-#from stable_baselines3.common.envs import DummyVecEnv, VecTransposeImage
-from stable_baselines3 import PPO
-
 class ImageObservationWrapper(gym.ObservationWrapper):
+
     def __init__(self, env, width=36, height=36):
         super(ImageObservationWrapper, self).__init__(env)
         self.width = width
@@ -156,7 +149,6 @@ def main():
     env = ImageObservationWrapper(env)
     env = DummyVecEnv([lambda: env])
 
-
     #==================================================================================
     # Define and Train the Model
 
@@ -189,51 +181,51 @@ def main():
     print(f"Mean reward, PPO with one image per step: {mean_reward} +/- {std_reward}")
 
 
-    #==================================================================================
-    # Recurrent PPO
+#==================================================================================
+# Recurrent PPO
 
-    class ImageObservationWrapper(gym.ObservationWrapper):
-        def __init__(self, env, width=36, height=36):
-            super(ImageObservationWrapper, self).__init__(env)
-            self.width = width
-            self.height = height
-            self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3), dtype=np.uint8)
+class ImageObservationWrapper(gym.ObservationWrapper):
+    def __init__(self, env, width=36, height=36):
+        super(ImageObservationWrapper, self).__init__(env)
+        self.width = width
+        self.height = height
+        self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3), dtype=np.uint8)
 
-        def observation(self, obs):
+    def observation(self, obs):
 
-            img = self.env.render(mode='rgb_array')  # Capture the rendered image from the environment
+        img = self.env.render(mode='rgb_array')  # Capture the rendered image from the environment
 
-            # Crop the image to focus on the pendulum
-            # assuming the pendulum is centered in the middle
-            center_x, center_y = img.shape[1] // 2, img.shape[0] // 2
-            crop_size = 250
-            img = img[center_y - crop_size//2:center_y + crop_size//2, center_x - crop_size//2:center_x + crop_size//2]
+        # Crop the image to focus on the pendulum
+        # assuming the pendulum is centered in the middle
+        center_x, center_y = img.shape[1] // 2, img.shape[0] // 2
+        crop_size = 250
+        img = img[center_y - crop_size//2:center_y + crop_size//2, center_x - crop_size//2:center_x + crop_size//2]
 
 
-            img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
-            img = img / 255.0  # normalization
+        img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
+        img = img / 255.0  # normalization
 
-            # # Plot the image
-            # plt.imshow(img)
-            # plt.axis('off')  # Turn off the axis labels
-            # plt.show(block=False)  # Non-blocking show
-            # plt.pause(0.001)  # Pause to allow the plot to updat
+        # # Plot the image
+        # plt.imshow(img)
+        # plt.axis('off')  # Turn off the axis labels
+        # plt.show(block=False)  # Non-blocking show
+        # plt.pause(0.001)  # Pause to allow the plot to updat
 
-            return img
+        return img
 
-        def reset(self, **kwargs):
-            # Reset the environment and return both the observation and an empty info dict
-            obs = self.env.reset(**kwargs)
-            img_obs = self.observation(obs)
-            return img_obs, {}  # Return the observation and an empty info dictionary
+    def reset(self, **kwargs):
+        # Reset the environment and return both the observation and an empty info dict
+        obs = self.env.reset(**kwargs)
+        img_obs = self.observation(obs)
+        return img_obs, {}  # Return the observation and an empty info dictionary
 
-        def step(self, action):
-            obs, reward, done, info = self.env.step(action)
-            img_obs = self.observation(obs)
-            return img_obs, reward, done, done, info  # Return observation, reward, terminated, truncated, info
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        img_obs = self.observation(obs)
+        return img_obs, reward, done, done, info  # Return observation, reward, terminated, truncated, info
 
-        def render(self, mode='human', **kwargs):
-            return self.env.render(mode=mode, **kwargs)
+    def render(self, mode='human', **kwargs):
+        return self.env.render(mode=mode, **kwargs)
 
 
     # Custom callback class to track the cumulative reward per episode
@@ -296,4 +288,9 @@ def main():
     print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward} +/- {std_reward}")
 
 if __name__ == '__main__':
+
+    # set hyperparameters
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    total_timesteps = 250000
+    episodes_test = 100
     main()
