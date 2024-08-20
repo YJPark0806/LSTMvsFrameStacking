@@ -60,7 +60,7 @@ def random_policy():
     mean_reward_random = np.mean(total_rewards)
     std_reward_random = np.std(total_rewards)
 
-    print(f"Mean reward, random policy: {mean_reward_random} +/- {std_reward_random}")
+    return mean_reward_random, std_reward_random
 
 #==================================================================================
 
@@ -140,9 +140,11 @@ class TotalRewardLoggerCallback(BaseCallback):
         return True
 
 
-#==================================================================================
+#================================================================================================
 
 if __name__ == '__main__':
+    # type [python pendulum_w__CV_using_stbs3.py] in your conda terminal to run this code
+
 
     # define the environment
     env = gym.make('Pendulum-v1')
@@ -151,41 +153,55 @@ if __name__ == '__main__':
 
     # set hyperparameters
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    total_timesteps = 50000
+    total_timesteps = 5000
     episodes_test = 20
 
-    #====================== [1] Recurrent PPO ===========================================
+
+    #============================= [1] Recurrent PPO ===========================================
 
     # Define and Train the Model
     # Define the Model
-    model_RPPOwO = RecurrentPPO('CnnLstmPolicy', env, verbose=1, device=device, batch_size=256,
+    model_RPPOwO = RecurrentPPO('CnnLstmPolicy',
+                                env,
+                                verbose=1,
+                                device=device,
+                                ent_coef=0.01,
+                                use_sde=True,
+                                learning_rate=0.0001,
+                                batch_size=256,
                                 tensorboard_log="./logs/RPPOwO/")
 
     # Initialize the custom callback
     total_reward_logger_RPPOwO = TotalRewardLoggerCallback()
 
     # Train the model with the custom callback
+    print('RecurrentPPO Training Start')
     model_RPPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_RPPOwO)
+    print('RecurrentPPO Training End')
 
     # Save the trained model
     model_RPPOwO.save("rppo_model")
 
-    # Plot the total reward per episode
+    # Save the total reward per episode figure
     plt.figure(figsize=(10, 5))
     plt.plot(total_reward_logger_RPPOwO.episode_rewards, label='Total Reward per Episode')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.title('<RecurrentPPO with one image>\n Total Reward per Episode During Training')
     plt.legend()
-    plt.show()
+    plt.savefig("RPPO_total_reward_per_episode.png")
 
-    # Test the Model
-    mean_reward, std_reward = evaluate_policy(model_RPPOwO, env, n_eval_episodes=episodes_test)
-    print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward} +/- {std_reward}")
-
-    #============================= [2] PPO ===========================================
+    #==================================== [2] PPO ===========================================
     # Define the Model
-    model_PPOwO = PPO('CnnPolicy', env, verbose=1, device='cuda', batch_size=256, tensorboard_log="./logs/PPOwO/")
+    model_PPOwO = PPO('CnnPolicy',
+                      env,
+                      verbose=1,
+                      device=device,
+                      ent_coef=0.01,
+                      use_sde=True,
+                      learning_rate=0.0001,
+                      batch_size=256,
+                      tensorboard_log="./logs/PPOwO/")
     '''
     This will automatically save logs to the specified directory (./logs/PPOwO/ in your case).
     To view these logs using TensorBoard: (1) Open a Terminal, 
@@ -194,12 +210,13 @@ if __name__ == '__main__':
     (4) Open TensorBoard in a Browser
     '''
 
-
     # Initialize the custom callback
     total_reward_logger_PPOwO = TotalRewardLoggerCallback()
 
     # Train the model with the custom callback
+    print('PPO Training Start')
     model_PPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_PPOwO)
+    print('PPO Training Start')
 
     # Save the trained model
     model_PPOwO.save("ppo_model")
@@ -208,17 +225,33 @@ if __name__ == '__main__':
     You can later load the model using: model_PPOwO = PPO.load("ppo_model")
     '''
 
-
-    # Plot the total reward per episode
+    # Save the total reward per episode figure
     plt.figure(figsize=(10, 5))
     plt.plot(total_reward_logger_PPOwO.episode_rewards, label='Total Reward per Episode')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.title('<PPO with one image>\n Total Reward per Episode During Training')
     plt.legend()
-    plt.show()
+    plt.savefig("PPO_total_reward_per_episode.png")
 
-    # Test the Model
-    mean_reward, std_reward = evaluate_policy(model_PPOwO, env, n_eval_episodes=episodes_test)
-    print(f"Mean reward, PPO with one image per step: {mean_reward} +/- {std_reward}")
 
+    #============================= [3] Model Testing ===========================================
+    # Load the model and test them
+    model_RPPOwO_loaded = PPO.load("rppo_model", env=env, device='cuda')
+    model_PPOwO_loaded = PPO.load("ppo_model", env=env, device='cuda')
+
+    # (1) Run the Random Policy Model
+    mean_reward_random, std_reward_random = random_policy()
+
+    # (2) Test the RecurrentPPO Model
+    mean_reward_RPPOwO, std_reward_RPPOwO = evaluate_policy(model_RPPOwO_loaded, env, n_eval_episodes=episodes_test)
+
+    # (3) Test the PPO Model
+    mean_reward_PPOwO, std_reward_PPOwO = evaluate_policy(model_PPOwO_loaded, env, n_eval_episodes=episodes_test)
+
+    # print the results
+    print("===============================================================================================")
+    print(f"Mean reward, random policy: {mean_reward_random} +/- {std_reward_random}")
+    print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward_RPPOwO} +/- {std_reward_RPPOwO}")
+    print(f"Mean reward, PPO with one image per step: {mean_reward_PPOwO} +/- {std_reward_PPOwO}")
+    print("===============================================================================================")
