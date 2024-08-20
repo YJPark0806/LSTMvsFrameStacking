@@ -39,11 +39,9 @@ from torch.distributions import MultivariateNormal
 
 #==================================================================================
 # First, we calculate the Mean reward of the Random Policy to set the baseline.
-
-
 def random_policy():
 
-    env = gym.make("Pendulum-v0")
+    env = gym.make("Pendulum-v1")
 
     # Random policy
     total_rewards = []
@@ -91,7 +89,7 @@ class ImageObservationWrapper(gym.ObservationWrapper):
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
         img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
-        img = img / 255.0  # normalization
+        img = img  # NO normalization
 
         # Add a channel dimension to the image (from (height, width) to (height, width, 1)), to make it compatible with CnnPolciy
         img = img[:, :, None]
@@ -142,27 +140,50 @@ class TotalRewardLoggerCallback(BaseCallback):
         return True
 
 
-def define_pendulum_env():
-
-    # Use the existing Pendulum environment
-    env = gym.make('Pendulum-v0')
-    env = ImageObservationWrapper(env)
-    env = DummyVecEnv([lambda: env])
-
-
 #==================================================================================
 
 if __name__ == '__main__':
 
     # define the environment
-    define_pendulum_env()
+    env = gym.make('Pendulum-v1')
+    env = ImageObservationWrapper(env)
+    env = DummyVecEnv([lambda: env])
 
     # set hyperparameters
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_timesteps = 50000
     episodes_test = 20
 
-    #============================= [1] PPO ===========================================
+    #====================== [1] Recurrent PPO ===========================================
+
+    # Define and Train the Model
+    # Define the Model
+    model_RPPOwO = RecurrentPPO('CnnLstmPolicy', env, verbose=1, device=device, batch_size=256,
+                                tensorboard_log="./logs/RPPOwO/")
+
+    # Initialize the custom callback
+    total_reward_logger_RPPOwO = TotalRewardLoggerCallback()
+
+    # Train the model with the custom callback
+    model_RPPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_RPPOwO)
+
+    # Save the trained model
+    model_RPPOwO.save("rppo_model")
+
+    # Plot the total reward per episode
+    plt.figure(figsize=(10, 5))
+    plt.plot(total_reward_logger_RPPOwO.episode_rewards, label='Total Reward per Episode')
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.title('<RecurrentPPO with one image>\n Total Reward per Episode During Training')
+    plt.legend()
+    plt.show()
+
+    # Test the Model
+    mean_reward, std_reward = evaluate_policy(model_RPPOwO, env, n_eval_episodes=episodes_test)
+    print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward} +/- {std_reward}")
+
+    #============================= [2] PPO ===========================================
     # Define the Model
     model_PPOwO = PPO('CnnPolicy', env, verbose=1, device='cuda', batch_size=256, tensorboard_log="./logs/PPOwO/")
     '''
@@ -201,33 +222,3 @@ if __name__ == '__main__':
     mean_reward, std_reward = evaluate_policy(model_PPOwO, env, n_eval_episodes=episodes_test)
     print(f"Mean reward, PPO with one image per step: {mean_reward} +/- {std_reward}")
 
-    # ==================================================================================
-    # Recurrent PPO
-
-    # Define and Train the Model
-    # Define the Model
-    model_RPPOwO = RecurrentPPO('CnnLstmPolicy', env1, verbose=1, device=device, batch_size=256,
-                                tensorboard_log="./logs/RPPOwO/")
-
-    # Initialize the custom callback
-    total_reward_logger_RPPOwO = TotalRewardLoggerCallback()
-
-    # Train the model with the custom callback
-    model_RPPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_RPPOwO)
-
-    # Save the trained model
-    model_RPPOwO.save("rppo_model")
-
-
-    # Plot the total reward per episode
-    plt.figure(figsize=(10, 5))
-    plt.plot(total_reward_logger_RPPOwO.episode_rewards, label='Total Reward per Episode')
-    plt.xlabel('Episode')
-    plt.ylabel('Total Reward')
-    plt.title('<RecurrentPPO with one image>\n Total Reward per Episode During Training')
-    plt.legend()
-    plt.show()
-
-    # Test the Model
-    mean_reward, std_reward = evaluate_policy(model_RPPOwO, env, n_eval_episodes=episodes_test)
-    print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward} +/- {std_reward}")
