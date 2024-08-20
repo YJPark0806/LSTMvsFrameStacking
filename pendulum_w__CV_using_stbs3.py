@@ -24,8 +24,8 @@ from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
-#from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.envs import DummyVecEnv, VecTransposeImage
+from stable_baselines3.common.vec_env import DummyVecEnv
+#from stable_baselines3.common.envs import DummyVecEnv, VecTransposeImage
 
 import torch
 import torch.nn as nn
@@ -142,18 +142,37 @@ class TotalRewardLoggerCallback(BaseCallback):
         return True
 
 
-def main():
+def define_pendulum_env():
 
     # Use the existing Pendulum environment
-    env = gym.make('Pendulum-v1')
+    env = gym.make('Pendulum-v0')
     env = ImageObservationWrapper(env)
     env = DummyVecEnv([lambda: env])
 
-    #==================================================================================
-    # Define and Train the Model
 
+#==================================================================================
+
+if __name__ == '__main__':
+
+    # define the environment
+    define_pendulum_env()
+
+    # set hyperparameters
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    total_timesteps = 50000
+    episodes_test = 20
+
+    #============================= [1] PPO ===========================================
     # Define the Model
     model_PPOwO = PPO('CnnPolicy', env, verbose=1, device='cuda', batch_size=256, tensorboard_log="./logs/PPOwO/")
+    '''
+    This will automatically save logs to the specified directory (./logs/PPOwO/ in your case).
+    To view these logs using TensorBoard: (1) Open a Terminal, 
+    (2) Navigate to the directory where your logs are stored (in your case, ./logs/),
+    (3) Execute the following command: tensorboard --logdir=./logs/ -> You'll get an url
+    (4) Open TensorBoard in a Browser
+    '''
+
 
     # Initialize the custom callback
     total_reward_logger_PPOwO = TotalRewardLoggerCallback()
@@ -161,11 +180,13 @@ def main():
     # Train the model with the custom callback
     model_PPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_PPOwO)
 
-    # # # Load the TensorBoard extension
-    # %load_ext tensorboard
-    #
-    # # Start TensorBoard and specify the log directory
-    # %tensorboard --logdir ./logs/PPOwO/ --port 6006
+    # Save the trained model
+    model_PPOwO.save("ppo_model")
+    '''
+    This will save the model in a file called ppo_model.zip in the current working directory.
+    You can later load the model using: model_PPOwO = PPO.load("ppo_model")
+    '''
+
 
     # Plot the total reward per episode
     plt.figure(figsize=(10, 5))
@@ -180,84 +201,13 @@ def main():
     mean_reward, std_reward = evaluate_policy(model_PPOwO, env, n_eval_episodes=episodes_test)
     print(f"Mean reward, PPO with one image per step: {mean_reward} +/- {std_reward}")
 
-
-#==================================================================================
-# Recurrent PPO
-
-class ImageObservationWrapper(gym.ObservationWrapper):
-    def __init__(self, env, width=36, height=36):
-        super(ImageObservationWrapper, self).__init__(env)
-        self.width = width
-        self.height = height
-        self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3), dtype=np.uint8)
-
-    def observation(self, obs):
-
-        img = self.env.render(mode='rgb_array')  # Capture the rendered image from the environment
-
-        # Crop the image to focus on the pendulum
-        # assuming the pendulum is centered in the middle
-        center_x, center_y = img.shape[1] // 2, img.shape[0] // 2
-        crop_size = 250
-        img = img[center_y - crop_size//2:center_y + crop_size//2, center_x - crop_size//2:center_x + crop_size//2]
-
-
-        img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
-        img = img / 255.0  # normalization
-
-        # # Plot the image
-        # plt.imshow(img)
-        # plt.axis('off')  # Turn off the axis labels
-        # plt.show(block=False)  # Non-blocking show
-        # plt.pause(0.001)  # Pause to allow the plot to updat
-
-        return img
-
-    def reset(self, **kwargs):
-        # Reset the environment and return both the observation and an empty info dict
-        obs = self.env.reset(**kwargs)
-        img_obs = self.observation(obs)
-        return img_obs, {}  # Return the observation and an empty info dictionary
-
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        img_obs = self.observation(obs)
-        return img_obs, reward, done, done, info  # Return observation, reward, terminated, truncated, info
-
-    def render(self, mode='human', **kwargs):
-        return self.env.render(mode=mode, **kwargs)
-
-
-    # Custom callback class to track the cumulative reward per episode
-    class TotalRewardLoggerCallback(BaseCallback):
-        def __init__(self, verbose=0):
-            super(TotalRewardLoggerCallback, self).__init__(verbose)
-            self.episode_rewards = []
-            self.current_episode_reward = 0
-
-        def _on_step(self) -> bool:
-            # Accumulate rewards using self.locals['rewards'] directly
-            reward = self.locals['rewards'][0]
-            self.current_episode_reward += reward
-
-            # Check if the episode is done
-            if self.locals['dones'][0]:
-                # Log the total reward for this episode
-                self.episode_rewards.append(self.current_episode_reward)
-                self.current_episode_reward = 0
-
-            return True
-
-
-    # Use the existing Pendulum environment
-    env1 = gym.make('Pendulum-v1')
-    env1 = ImageObservationWrapper(env1)
-    env1 = DummyVecEnv([lambda: env1])
-
+    # ==================================================================================
+    # Recurrent PPO
 
     # Define and Train the Model
     # Define the Model
-    model_RPPOwO = RecurrentPPO('CnnLstmPolicy', env1, verbose=1, device=device, batch_size=256, tensorboard_log="./logs/RPPOwO/")
+    model_RPPOwO = RecurrentPPO('CnnLstmPolicy', env1, verbose=1, device=device, batch_size=256,
+                                tensorboard_log="./logs/RPPOwO/")
 
     # Initialize the custom callback
     total_reward_logger_RPPOwO = TotalRewardLoggerCallback()
@@ -265,13 +215,9 @@ class ImageObservationWrapper(gym.ObservationWrapper):
     # Train the model with the custom callback
     model_RPPOwO.learn(total_timesteps=total_timesteps, callback=total_reward_logger_RPPOwO)
 
+    # Save the trained model
+    model_RPPOwO.save("rppo_model")
 
-    # Evaluate the Model
-    # Load the TensorBoard extension
-    #%load_ext tensorboard
-
-    # # Start TensorBoard and specify the log directory
-    # %tensorboard --logdir ./logs/RPPOwO/ --port 6007
 
     # Plot the total reward per episode
     plt.figure(figsize=(10, 5))
@@ -282,15 +228,6 @@ class ImageObservationWrapper(gym.ObservationWrapper):
     plt.legend()
     plt.show()
 
-
     # Test the Model
     mean_reward, std_reward = evaluate_policy(model_RPPOwO, env, n_eval_episodes=episodes_test)
     print(f"Mean reward, RecurrentPPO with one image per step: {mean_reward} +/- {std_reward}")
-
-if __name__ == '__main__':
-
-    # set hyperparameters
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    total_timesteps = 250000
-    episodes_test = 100
-    main()
