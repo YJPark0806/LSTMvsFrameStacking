@@ -66,14 +66,41 @@ def random_policy():
 
 # We only deal with one observation image per step
 
+# Define the autoencoder
+class Autoencoder(nn.Module):
+    def __init__(self):
+        super(Autoencoder, self).__init__()
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),  # 36x36x1 -> 18x18x16
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # 18x18x16 -> 9x9x32
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # 9x9x32 -> 5x5x64
+            nn.ReLU(),
+            nn.Flatten(),  # 5x5x64 -> 1600
+            nn.Linear(5 * 5 * 64, 512),  # 1600 -> 512
+            nn.ReLU(),
+            nn.Linear(512, 256),  # 512 -> 256
+            nn.ReLU(),
+            nn.Linear(256, 128),  # 256 -> 128
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        return x
+
+
 # Define the Environment Wrapper
 class ImageObservationWrapper(gym.ObservationWrapper):
 
-    def __init__(self, env, width=36, height=36):
+    def __init__(self, env, autoencoder, width=36, height=36):
         super(ImageObservationWrapper, self).__init__(env)
         self.width = width
         self.height = height
-        self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3), dtype=np.uint8)
+        self.autoencoder = autoencoder
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(128,), dtype=np.float32)
 
     def observation(self, obs):
 
@@ -86,13 +113,10 @@ class ImageObservationWrapper(gym.ObservationWrapper):
         img = img[center_y - crop_size//2:center_y + crop_size//2, center_x - crop_size//2:center_x + crop_size//2]
 
         # Convert to grayscale
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)  # (Cropped_H, Cropped_W, 3) -> (Cropped_H, Cropped_W)
 
-        img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
-        img = img  # NO normalization
-
-        # Add a channel dimension to the image (from (height, width) to (height, width, 1)), to make it compatible with CnnPolciy
-        img = img[:, :, None]
+        # Resize the image to the desired size
+        img = cv2.resize(img, (self.width, self.height))  # (Cropped_H, Cropped_W) -> (36, 36)
 
         # # Plot the image
         #   # NOTE THAT When you display a grayscale image using imshow,
@@ -100,9 +124,18 @@ class ImageObservationWrapper(gym.ObservationWrapper):
         # plt.imshow(img)
         # plt.axis('off')  # Turn off the axis labels
         # plt.show(block=False)  # Non-blocking show
-        # plt.pause(0.001)  # Pause to allow the plot to updat
+        # plt.pause(0.001)  # Pause to allow the plot to update
 
-        return img
+        # numpy array -> pytorch tensor; add channel dimension
+        img = torch.tensor(img, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        # (36, 36) 2d numpy array -> (1, 1, 36, 36) 4d Pytorch Tensor
+
+        # Preprocess the image using the encoder
+        with torch.no_grad():
+            img_encoded = self.autoencoder(img).squeeze(0).numpy()
+            # (1, 1, 36, 36) 4d Pytorch Tensor -> (128,) 1d numpy array
+
+        return img_encoded
 
     def reset(self, **kwargs):
         # Reset the environment and return both the observation and an empty info dict
@@ -145,23 +178,25 @@ class TotalRewardLoggerCallback(BaseCallback):
 if __name__ == '__main__':
     # type [python pendulum_w__CV_using_stbs3.py] in your conda terminal to run this code
 
+    # define the autoencoder
+    autoencoder = Autoencoder()
 
     # define the environment
     env = gym.make('Pendulum-v1')
-    env = ImageObservationWrapper(env)
+    env = ImageObservationWrapper(env, autoencoder=autoencoder)
     env = DummyVecEnv([lambda: env])
 
     # set hyperparameters
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    total_timesteps = 5000
-    episodes_test = 20
+    total_timesteps = 500000
+    episodes_test = 200
 
 
     #============================= [1] Recurrent PPO ===========================================
 
     # Define and Train the Model
     # Define the Model
-    model_RPPOwO = RecurrentPPO('CnnLstmPolicy',
+    model_RPPOwO = RecurrentPPO('MlpLstmPolicy',  # not CnnLstmPolicy
                                 env,
                                 verbose=1,
                                 device=device,
@@ -193,7 +228,7 @@ if __name__ == '__main__':
 
     #==================================== [2] PPO ===========================================
     # Define the Model
-    model_PPOwO = PPO('CnnPolicy',
+    model_PPOwO = PPO('MlpPolicy',  # Not CnnPolicy
                       env,
                       verbose=1,
                       device=device,
