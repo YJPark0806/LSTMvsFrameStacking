@@ -1,11 +1,7 @@
 '''
-vr2 -> vr3
-*   Cropped the observation image, removing some backgrounds
-*   Changed RGB to Grayscale
-
 vr3 -> vr4
-*   Changed the width and height from 64x64 to 36x36
-*   Changed the total timesteps from 500000 to 250000
+*   Modified the parameters : ent_coef=0.01, use_sde=True, gamma=0.9, learning_rate=0.0001, batch_size=256
+*   total_timesteps = 500000
 '''
 
 # Import Libraries
@@ -13,7 +9,7 @@ import gym
 from gym import spaces
 
 import cv2
-#import pybulletgym
+import pybulletgym
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -41,7 +37,7 @@ from torch.distributions import MultivariateNormal
 # First, we calculate the Mean reward of the Random Policy to set the baseline.
 def random_policy():
 
-    env = gym.make("Pendulum-v1")
+    env = gym.make('InvertedDoublePendulumPyBulletEnv-v0')
 
     # Random policy
     total_rewards = []
@@ -52,8 +48,8 @@ def random_policy():
         episode_reward = 0
         while not done:
             # Take a random action, ensuring it is in the correct format
-            action = env.action_space.sample()
-            obs, reward, done, info = env.step(action)  # Handle the additional truncated value
+            action = np.array([env.action_space.sample()])
+            obs, reward, done, info = env.step(action)
             episode_reward += reward
         total_rewards.append(episode_reward)
 
@@ -67,32 +63,23 @@ def random_policy():
 # We only deal with one observation image per step
 
 # Define the Environment Wrapper
-class ImageObservationWrapper(gym.ObservationWrapper):
-
-    def __init__(self, env, width=36, height=36):
-        super(ImageObservationWrapper, self).__init__(env)
+class ImageInputWrapper(gym.ObservationWrapper):
+    def __init__(self, env, width=64, height=64):
+        super(ImageInputWrapper, self).__init__(env)  # execute the parent class's init method
+        self.env = env
         self.width = width
         self.height = height
-        self.observation_space = spaces.Box(low=0, high=255, shape=(height, width, 3), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=255,
+                                                shape=(height, width, 1), dtype=np.uint8)  # modify the observation space
 
     def observation(self, obs):
-
-        img = self.env.render(mode='rgb_array')  # Capture the rendered image from the environment
+        img = self.env.render(mode='rgb_array')  # captures an image of the environment
 
         # Crop the image to focus on the pendulum
         # assuming the pendulum is centered in the middle
         center_x, center_y = img.shape[1] // 2, img.shape[0] // 2
-        crop_size = 250
+        crop_size = 160
         img = img[center_y - crop_size//2:center_y + crop_size//2, center_x - crop_size//2:center_x + crop_size//2]
-
-        # Convert to grayscale
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-        img = cv2.resize(img, (self.width, self.height))  # Resize the image to the desired size
-        img = img  # NO normalization
-
-        # Add a channel dimension to the image (from (height, width) to (height, width, 1)), to make it compatible with CnnPolciy
-        img = img[:, :, None]
 
         # # Plot the image
         #   # NOTE THAT When you display a grayscale image using imshow,
@@ -102,21 +89,14 @@ class ImageObservationWrapper(gym.ObservationWrapper):
         # plt.show(block=False)  # Non-blocking show
         # plt.pause(0.001)  # Pause to allow the plot to updat
 
+        # Process the image (resize, grayscale, normalize)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img = cv2.resize(img, (self.width, self.height))
+        # Add a channel dimension to the image (from (height, width) to (height, width, 1)), to make it compatible with CnnPolciy
+        img = img[:, :, None]
+
+
         return img
-
-    def reset(self, **kwargs):
-        # Reset the environment and return both the observation and an empty info dict
-        obs = self.env.reset(**kwargs)
-        img_obs = self.observation(obs)
-        return img_obs, {}  # Return the observation and an empty info dictionary
-
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        img_obs = self.observation(obs)
-        return img_obs, reward, done, done, info  # Return observation, reward, terminated, truncated, info
-
-    def render(self, mode='human', **kwargs):
-        return self.env.render(mode=mode, **kwargs)
 
 
 # Custom callback class to track the cumulative reward per episode
@@ -143,17 +123,17 @@ class TotalRewardLoggerCallback(BaseCallback):
 #================================================================================================
 
 if __name__ == '__main__':
-    # type [python pendulum_w__CV_using_stbs3_final.py] in your conda terminal to run this code
+    # type [python dip_w__CV_using_stbs3_vr4.py] in your conda terminal to run this code
 
 
     # define the environment
-    env = gym.make('Pendulum-v1')
-    env = ImageObservationWrapper(env)
-    env = DummyVecEnv([lambda: env])
+    env = gym.make('InvertedDoublePendulumPyBulletEnv-v0')
+    env = ImageInputWrapper(env)  # Creates an object of ImageInputWrapper class; Inputs the screen image
+    env = DummyVecEnv([lambda: env])  # returns the env object; necessary in stablebaseline3
 
     # set hyperparameters
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    total_timesteps = 1000000
+    total_timesteps = 500000
     episodes_test = 50
 
 
