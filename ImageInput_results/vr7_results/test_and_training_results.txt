@@ -1,0 +1,10 @@
+Test Results:
+Model      Mean Reward          Average Time (s)     Max Time (s)    Success Rate (1s+)  
+Random     -1209.80 +- 293.97          4.00                 4.00            100.00%             
+RPPOwO     -727.30 +- 139.20          4.00                 4.00            100.00%             
+PPOwM      -1420.17 +- 264.55          4.00                 4.00            100.00%             
+
+Training Results:
+Model      Training Time (s)    Total Parameters    
+RPPOwO     19261.39             1682850             
+PPOwM      8976.32              108706              
