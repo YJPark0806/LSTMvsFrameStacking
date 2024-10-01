@@ -1,0 +1,4 @@
+Test Results:
+Model      Mean Reward          Average Time (s)     Max Time (s)    Success Rate (1s+)  
+Random     -1231.47 +- 328.19          4.00                 4.00            100.00%             
+RPPOwO     -1330.72 +- 134.99          4.00                 4.00            100.00%             
