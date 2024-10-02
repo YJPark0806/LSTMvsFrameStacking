@@ -1,9 +1,10 @@
 # LSTM vs FrameStacking
 
-## Full Name of the Paper
 **A Comparative Study on the Performance of LSTM and Frame Stacking Methods in Time Series Data Processing Based on Environmental Complexity**
 
 **환경 복잡도에 따른 시계열 데이터 처리 시 LSTM 과 프레임 스태킹 방법의 성능 비교**
+
+This paper was published at The 5th Korea Artificial Intelligence Conference. The presentation was delivered in Korean by Youngju Park and is available [here](https://www.youtube.com/watch?v=3wk4ScrPFkM&t=0s).
 
 ## Overview
 This repository contains the code and materials related to the research on comparing the performance of two different methods, **PPO with Frame Stacking** and **PPO with LSTM**, for processing time series data in environments of varying complexity. The study focuses on OpenAI Gym's Pendulum environment, introducing three levels of observation difficulty to evaluate the models' effectiveness.
