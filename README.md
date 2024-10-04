@@ -4,8 +4,7 @@
 
 **환경 복잡도에 따른 시계열 데이터 처리 시 LSTM 과 프레임 스태킹 방법의 성능 비교**
 
-This paper was published at The 5th Korea Artificial Intelligence Conference. The presentation was delivered in Korean by Youngju Park and is available [here](https://www.youtube.com/watch?v=3wk4ScrPFkM&t=0s).
-
+This paper was published at The 5th Korea Artificial Intelligence Conference and received an Honorable Mention. The presentation was delivered in Korean by Youngju Park and is available [here](https://www.youtube.com/watch?v=3wk4ScrPFkM&t=0s).
 ## Overview
 This repository contains the code and materials related to the research on comparing the performance of two different methods, **PPO with Frame Stacking** and **PPO with LSTM**, for processing time series data in environments of varying complexity. The study focuses on OpenAI Gym's Pendulum environment, introducing three levels of observation difficulty to evaluate the models' effectiveness.
 
@@ -84,6 +83,11 @@ The introduction of image frame environments further distinguishes this research
 This study has certain limitations, primarily focusing on a single environment, the Pendulum. To generalize the performance differences between the two models, future research should extend the experiments to more diverse environments. Additionally, while this study uniquely incorporates image frames into the environment, exploring other types of observations and inputs would further validate the conclusions drawn here.
 
 Despite these limitations, the observed superiority of **PPO + LSTM** in more complex settings provides valuable insights into the model's potential for broader applicability, both in simulated environments and real-world control tasks.
+
+## References
+-  W&B, "PPO vs RecurrentPPO (aka PPO LSTM) on 
+environments with masked velocity [SB3 Contrib]," 2023, 
+([Link](https://wandb.ai/sb3/no-vel-envs/reports/PPO-vs-RecurrentPPO-aka-PPO-LSTM-on-environments-with-masked-velocity-SB3-Contrib---VmlldzoxOTI4NjE4#ppo-lstm-vs-ppo-(no-framestack))).
 
 ---
 
